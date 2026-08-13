@@ -1,0 +1,44 @@
+name: Update Spoon profile photo
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/update-profile-photo.yml
+  schedule:
+    - cron: "17 * * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-photo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the current Spoon profile photo
+        run: |
+          python - <<'PY'
+          import re
+          import urllib.request
+
+          page_url = "https://www.spooncast.net/kr/channel/9419028/tab/home"
+          request = urllib.request.Request(page_url, headers={"User-Agent": "Mozilla/5.0"})
+          html = urllib.request.urlopen(request, timeout=30).read().decode("utf-8", "ignore")
+          normalized = html.replace("\\/", "/").replace("\\u002F", "/")
+          matches = re.findall(r'https://kr-cdn\.spooncast\.net/profiles[^"\'<>\s]+', normalized)
+          if not matches:
+              raise SystemExit("Could not find a public Spoon profile image in the channel page.")
+          image_url = matches[0].replace("\\/", "/")
+          image_request = urllib.request.Request(image_url, headers={"User-Agent": "Mozilla/5.0"})
+          with urllib.request.urlopen(image_request, timeout=30) as response, open("profile-photo.jpg", "wb") as output:
+              output.write(response.read())
+          PY
+      - name: Commit a changed photo
+        run: |
+          git add profile-photo.jpg
+          git diff --cached --quiet && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update Spoon profile photo"
+          git push
